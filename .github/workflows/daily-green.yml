@@ -56,4 +56,6 @@ jobs:
           done
 
       - name: Push
-        run: git push
+        run: |
+          git pull --rebase origin main || true
+          git push || (git pull --rebase origin main && git push)
