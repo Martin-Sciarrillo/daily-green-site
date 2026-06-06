@@ -1,0 +1,59 @@
+name: Daily Green
+
+# Mantiene el grafico de contribuciones verde generando actividad diaria real en el site.
+on:
+  schedule:
+    # 12:10 UTC (~09:10 ART). El cron de Actions puede demorarse algunos minutos: es normal.
+    - cron: "10 12 * * *"
+  workflow_dispatch:        # permite dispararlo a mano desde la pestaña Actions
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write           # necesario para que el bot pushee de vuelta
+
+concurrency:
+  group: daily-green
+  cancel-in-progress: false
+
+jobs:
+  green:
+    runs-on: ubuntu-latest
+    env:
+      # Cuantos commits por corrida (controla la intensidad del verde).
+      COMMITS_PER_RUN: "4"
+      # IMPORTANTE: este email debe estar VERIFICADO en tu cuenta de GitHub,
+      # si no, los commits no cuentan en tu grafico.
+      # Guarda el valor real en Settings > Secrets and variables > Actions > Variables: AUTHOR_EMAIL
+      AUTHOR_EMAIL: ${{ vars.AUTHOR_EMAIL }}
+      AUTHOR_NAME: ${{ vars.AUTHOR_NAME }}
+      SITE_TZ: "America/Argentina/Buenos_Aires"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Configurar identidad git
+        run: |
+          git config user.email "${AUTHOR_EMAIL:-${{ github.actor }}@users.noreply.github.com}"
+          git config user.name  "${AUTHOR_NAME:-${{ github.actor }}}"
+
+      - name: Generar actividad y commitear
+        run: |
+          set -e
+          N="${COMMITS_PER_RUN:-4}"
+          for i in $(seq 1 "$N"); do
+            node scripts/generate-daily.mjs
+            git add -A
+            if git diff --cached --quiet; then
+              echo "Sin cambios en iteracion $i, salto."
+            else
+              git commit -m "chore(daily): actividad $(date -u +%FT%TZ) [$i/$N]"
+            fi
+            sleep 1
+          done
+
+      - name: Push
+        run: git push
