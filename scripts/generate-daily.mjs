@@ -10,6 +10,7 @@ const LOG_DIR = join(ROOT, "content", "log");
 const DATA = join(ROOT, "data", "streak.json");
 
 mkdirSync(LOG_DIR, { recursive: true });
+mkdirSync(dirname(DATA), { recursive: true });
 
 // --- Fecha local (TZ configurable por env, default America/Argentina/Buenos_Aires) ---
 const TZ = process.env.SITE_TZ || "America/Argentina/Buenos_Aires";
