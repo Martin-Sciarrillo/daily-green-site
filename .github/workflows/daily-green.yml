@@ -20,10 +20,9 @@ jobs:
   green:
     runs-on: ubuntu-latest
     env:
-      # Rango de commits por corrida. Cada dia elige un numero al azar en
-      # [COMMITS_MIN, COMMITS_MAX] para que el verde no sea siempre igual.
-      COMMITS_MIN: "1"
-      COMMITS_MAX: "5"
+      # Intensidad del verde por dia. En vez de un numero fijo, cada dia cae en
+      # un "tier" (alto/medio/bajo) segun un hash de la fecha, y una minoria de
+      # dias queda en cero para que luzca real. Ver el step de mas abajo.
       # IMPORTANTE: este email debe estar VERIFICADO en tu cuenta de GitHub,
       # si no, los commits no cuentan en tu grafico.
       # Guarda el valor real en Settings > Secrets and variables > Actions > Variables: AUTHOR_EMAIL
@@ -45,15 +44,27 @@ jobs:
       - name: Generar actividad y commitear
         run: |
           set -e
-          MIN="${COMMITS_MIN:-1}"
-          MAX="${COMMITS_MAX:-5}"
-          # Semilla por fecha local, hasheada para que el numero del dia sea
-          # impredecible (mismo dia => mismo N, estable ante reruns/push).
+          # Hash de la fecha local => numero estable por dia (mismo dia, mismo N
+          # ante reruns) pero impredecible de un dia al otro.
           SEED=$(TZ="$SITE_TZ" date +%Y%m%d)
-          H=$(printf '%s' "$SEED" | sha256sum | cut -c1-6)
-          RANGE=$(( MAX - MIN + 1 ))
-          N=$(( MIN + (16#$H % RANGE) ))
-          echo "Commits de hoy: $N (rango $MIN-$MAX)"
+          HASH=$(printf '%s' "$SEED" | sha256sum)
+          P=$(( 16#${HASH:0:4} % 100 ))   # 0-99: elige el tier del dia
+          Q=$(( 16#${HASH:4:4} ))         # entropia para el numero dentro del tier
+          # Distribucion de tiers (da variedad de colores en el grafico):
+          #   ~12% dias sin actividad (minoria, para que luzca real)
+          #   ~35% tier bajo    (verde claro)   1-3
+          #   ~30% tier medio   (verde medio)   5-8
+          #   ~23% tier alto    (verde fuerte) 10-15
+          if   [ "$P" -lt 12 ]; then N=0; TIER="off"
+          elif [ "$P" -lt 47 ]; then N=$(( 1  + Q % 3 )); TIER="bajo"
+          elif [ "$P" -lt 77 ]; then N=$(( 5  + Q % 4 )); TIER="medio"
+          else                       N=$(( 10 + Q % 6 )); TIER="alto"
+          fi
+          echo "Tier de hoy: $TIER -> $N commit(s)"
+          if [ "$N" -eq 0 ]; then
+            echo "Dia sin actividad, nada que commitear."
+            exit 0
+          fi
           for i in $(seq 1 "$N"); do
             node scripts/generate-daily.mjs
             git add -A
