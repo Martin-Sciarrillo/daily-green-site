@@ -20,8 +20,10 @@ jobs:
   green:
     runs-on: ubuntu-latest
     env:
-      # Cuantos commits por corrida (controla la intensidad del verde).
-      COMMITS_PER_RUN: "4"
+      # Rango de commits por corrida. Cada dia elige un numero al azar en
+      # [COMMITS_MIN, COMMITS_MAX] para que el verde no sea siempre igual.
+      COMMITS_MIN: "1"
+      COMMITS_MAX: "5"
       # IMPORTANTE: este email debe estar VERIFICADO en tu cuenta de GitHub,
       # si no, los commits no cuentan en tu grafico.
       # Guarda el valor real en Settings > Secrets and variables > Actions > Variables: AUTHOR_EMAIL
@@ -43,7 +45,15 @@ jobs:
       - name: Generar actividad y commitear
         run: |
           set -e
-          N="${COMMITS_PER_RUN:-4}"
+          MIN="${COMMITS_MIN:-1}"
+          MAX="${COMMITS_MAX:-5}"
+          # Semilla por fecha local, hasheada para que el numero del dia sea
+          # impredecible (mismo dia => mismo N, estable ante reruns/push).
+          SEED=$(TZ="$SITE_TZ" date +%Y%m%d)
+          H=$(printf '%s' "$SEED" | sha256sum | cut -c1-6)
+          RANGE=$(( MAX - MIN + 1 ))
+          N=$(( MIN + (16#$H % RANGE) ))
+          echo "Commits de hoy: $N (rango $MIN-$MAX)"
           for i in $(seq 1 "$N"); do
             node scripts/generate-daily.mjs
             git add -A
